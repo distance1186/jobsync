@@ -47,12 +47,14 @@ export interface ScrapedJob {
 }
 
 /**
- * Search scraped jobs from Jobber Postgres by keyword (title match) and
- * optional location. Intended as the data source for automation runs.
+ * Search scraped jobs from Jobber Postgres by keyword and optional location.
+ * Intended as the data source for automation runs.
  *
- * Keywords are split on whitespace; all words ≥ 3 chars must appear in
- * the job title (case-insensitive). Location is skipped when empty or
- * when it matches a broad US-wide term.
+ * Keywords are split on whitespace; any word ≥ 3 chars matching in title OR
+ * description qualifies the job as a candidate. OR logic is intentional —
+ * the automation's AI match threshold does the real filtering.
+ *
+ * Location is skipped when empty or when it matches a broad US-wide term.
  *
  * Returns up to 100 jobs sorted by relevance_score DESC, date_scraped DESC.
  * Returns [] if the pool is unavailable.
@@ -75,11 +77,14 @@ export async function searchScrapedJobs(
   const conditions: string[] = [`date_scraped >= NOW() - ($1 || ' days')::interval`];
 
   if (words.length > 0) {
+    // OR across words: any keyword appearing in title OR description qualifies.
+    // The AI match threshold handles precision filtering.
     const wordConds = words.map((w) => {
       params.push(`%${w}%`);
-      return `title ILIKE $${paramIdx++}`;
+      params.push(`%${w}%`);
+      return `(title ILIKE $${paramIdx++} OR description ILIKE $${paramIdx++})`;
     });
-    conditions.push(`(${wordConds.join(" AND ")})`);
+    conditions.push(`(${wordConds.join(" OR ")})`);
   }
 
   const broad = ["united states", "us", "usa", "u.s.", "u.s.a.", "remote", ""];
