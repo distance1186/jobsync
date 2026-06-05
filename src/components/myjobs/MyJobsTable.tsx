@@ -8,6 +8,9 @@ import {
   TableRow,
 } from "../ui/table";
 import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   ListCollapse,
   MoreHorizontal,
   Pencil,
@@ -45,6 +48,9 @@ type MyJobsTableProps = {
   editJob: (id: string) => void;
   onChangeJobStatus: (id: string, status: JobStatus) => void;
   onAddNote: (jobId: string) => void;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  onSort?: (column: string) => void;
 };
 
 function MyJobsTable({
@@ -54,9 +60,19 @@ function MyJobsTable({
   editJob,
   onChangeJobStatus,
   onAddNote,
+  sortBy,
+  sortDir,
+  onSort,
 }: MyJobsTableProps) {
   const [alertOpen, setAlertOpen] = useState(false);
   const [jobIdToDelete, setJobIdToDelete] = useState("");
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortBy !== col) return <ChevronsUpDown className="ml-1 h-3.5 w-3.5 opacity-50 inline" />;
+    return sortDir === "asc"
+      ? <ChevronUp className="ml-1 h-3.5 w-3.5 inline" />
+      : <ChevronDown className="ml-1 h-3.5 w-3.5 inline" />;
+  };
 
   const router = useRouter();
   const viewJobDetails = (jobId: string) => {
@@ -76,12 +92,37 @@ function MyJobsTable({
             <TableHead className="hidden w-[100px] sm:table-cell">
               <span className="sr-only">Company Logo</span>
             </TableHead>
-            <TableHead className="hidden md:table-cell">Date Applied</TableHead>
-            <TableHead>Title</TableHead>
-            <TableHead>Company</TableHead>
+            <TableHead
+              className="hidden md:table-cell cursor-pointer select-none"
+              onClick={() => onSort?.("appliedDate")}
+            >
+              Date Applied<SortIcon col="appliedDate" />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("title")}
+            >
+              Title<SortIcon col="title" />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("company")}
+            >
+              Company<SortIcon col="company" />
+            </TableHead>
             <TableHead className="hidden md:table-cell">Location</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden md:table-cell">Match</TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("status")}
+            >
+              Status<SortIcon col="status" />
+            </TableHead>
+            <TableHead
+              className="hidden md:table-cell cursor-pointer select-none"
+              onClick={() => onSort?.("matchScore")}
+            >
+              Match<SortIcon col="matchScore" />
+            </TableHead>
             <TableHead className="hidden md:table-cell">Source</TableHead>
             <TableHead>
               <span className="sr-only">Actions</span>

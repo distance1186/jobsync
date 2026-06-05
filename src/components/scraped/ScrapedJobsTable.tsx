@@ -27,19 +27,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   ExternalLink,
   MapPin,
   Building2,
   Wifi,
   Loader2,
+  PlusCircle,
+  Wand2,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { useRouter } from "next/navigation";
 import type { ScrapedJob } from "@/lib/jobber-db";
-import { updateScrapedJobStatus } from "@/actions/scrapedJobs.actions";
+import { updateScrapedJobStatus, addScrapedJobToMyJobs } from "@/actions/scrapedJobs.actions";
+
+const RESUME_TAILOR_URL = process.env.NEXT_PUBLIC_RESUME_TAILOR_URL ?? "http://localhost:5050";
 
 interface ScrapedJobsTableProps {
   jobs: ScrapedJob[];
   onRefresh: () => void;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  onSort?: (column: string) => void;
 }
 
 function ScoreBadge({ score }: { score: number }) {
@@ -71,9 +82,17 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-export function ScrapedJobsTable({ jobs, onRefresh }: ScrapedJobsTableProps) {
+export function ScrapedJobsTable({ jobs, onRefresh, sortBy, sortDir, onSort }: ScrapedJobsTableProps) {
+  const router = useRouter();
   const [selectedJob, setSelectedJob] = useState<ScrapedJob | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortBy !== col) return <ChevronsUpDown className="ml-1 h-3.5 w-3.5 opacity-50 inline" />;
+    return sortDir === "asc"
+      ? <ChevronUp className="ml-1 h-3.5 w-3.5 inline" />
+      : <ChevronDown className="ml-1 h-3.5 w-3.5 inline" />;
+  };
 
   const handleStatusChange = (jobId: string, newStatus: string) => {
     startTransition(async () => {
@@ -90,18 +109,74 @@ export function ScrapedJobsTable({ jobs, onRefresh }: ScrapedJobsTableProps) {
     });
   };
 
+  const handleAddToMyJobs = (job: ScrapedJob) => {
+    startTransition(async () => {
+      const result = await addScrapedJobToMyJobs(job.job_id);
+      if (result.success) {
+        toast({ description: `"${job.title}" added to My Jobs` });
+        if (result.jobId) router.push(`/dashboard/myjobs/${result.jobId}`);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Failed to add job",
+          description: result.message,
+        });
+      }
+    });
+  };
+
+  const handleTailorResume = (job: ScrapedJob) => {
+    const params = new URLSearchParams({
+      title: job.title ?? "",
+      company: job.company ?? "",
+      description: job.description ?? "",
+    });
+    window.open(`${RESUME_TAILOR_URL}/prefill?${params.toString()}`, "_blank");
+  };
+
   return (
     <>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[30%]">Job</TableHead>
-            <TableHead>Company</TableHead>
+            <TableHead
+              className="w-[30%] cursor-pointer select-none"
+              onClick={() => onSort?.("title")}
+            >
+              Job<SortIcon col="title" />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("company")}
+            >
+              Company<SortIcon col="company" />
+            </TableHead>
             <TableHead>Location</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead className="text-center">Score</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Scraped</TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("source")}
+            >
+              Source<SortIcon col="source" />
+            </TableHead>
+            <TableHead
+              className="text-center cursor-pointer select-none"
+              onClick={() => onSort?.("relevance_score")}
+            >
+              Score<SortIcon col="relevance_score" />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("status")}
+            >
+              Status<SortIcon col="status" />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => onSort?.("date_scraped")}
+            >
+              Scraped<SortIcon col="date_scraped" />
+            </TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -178,6 +253,31 @@ export function ScrapedJobsTable({ jobs, onRefresh }: ScrapedJobsTableProps) {
                 {job.date_scraped
                   ? format(new Date(job.date_scraped), "MMM d")
                   : "—"}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    disabled={isPending}
+                    onClick={(e) => { e.stopPropagation(); handleAddToMyJobs(job); }}
+                    title="Add to My Jobs"
+                  >
+                    <PlusCircle className="h-3 w-3 mr-1" />
+                    Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={(e) => { e.stopPropagation(); handleTailorResume(job); }}
+                    title="Tailor Resume"
+                  >
+                    <Wand2 className="h-3 w-3 mr-1" />
+                    Tailor
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -256,6 +356,25 @@ export function ScrapedJobsTable({ jobs, onRefresh }: ScrapedJobsTableProps) {
                   </a>
                 </div>
               )}
+              <div className="mt-4 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled={isPending}
+                  onClick={() => handleAddToMyJobs(selectedJob)}
+                >
+                  <PlusCircle className="h-4 w-4 mr-1" />
+                  Add to My Jobs
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTailorResume(selectedJob)}
+                >
+                  <Wand2 className="h-4 w-4 mr-1" />
+                  Tailor Resume
+                </Button>
+              </div>
             </>
           )}
         </DialogContent>

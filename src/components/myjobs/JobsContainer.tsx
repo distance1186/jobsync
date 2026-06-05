@@ -87,9 +87,20 @@ function JobsContainer({
   );
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteJobId, setNoteJobId] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const hasSearched = useRef(false);
 
   const jobsPerPage = recordsPerPage;
+
+  const handleSort = (column: string) => {
+    if (column === sortBy) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("desc");
+    }
+  };
 
   const loadJobs = useCallback(
     async (page: number, filter?: string, search?: string) => {
@@ -99,6 +110,8 @@ function JobsContainer({
         jobsPerPage,
         filter,
         search,
+        sortBy,
+        sortDir,
       );
       if (success && data) {
         setJobs((prev) => (page === 1 ? data : [...prev, ...data]));
@@ -115,7 +128,7 @@ function JobsContainer({
         return;
       }
     },
-    [jobsPerPage],
+    [jobsPerPage, sortBy, sortDir],
   );
 
   const reloadJobs = useCallback(async () => {
@@ -312,6 +325,9 @@ function JobsContainer({
                 editJob={onEditJob}
                 onChangeJobStatus={onChangeJobStatus}
                 onAddNote={onAddNote}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
               />
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
                 <RecordsCount

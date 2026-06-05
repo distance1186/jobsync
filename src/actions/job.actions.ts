@@ -41,6 +41,8 @@ export const getJobsList = async (
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   filter?: string,
   search?: string,
+  sortBy: string = "createdAt",
+  sortDir: "asc" | "desc" = "desc",
 ): Promise<any | undefined> => {
   try {
     const user = await getCurrentUser();
@@ -96,10 +98,15 @@ export const getJobsList = async (
           matchScore: true,
           _count: { select: { Notes: true } },
         },
-        orderBy: {
-          createdAt: "desc",
-          // appliedDate: "desc",
-        },
+        orderBy: ((): any => {
+          if (sortBy === "appliedDate") return { appliedDate: sortDir };
+          if (sortBy === "matchScore") return { matchScore: sortDir };
+          if (sortBy === "dueDate") return { dueDate: sortDir };
+          if (sortBy === "title") return { JobTitle: { label: sortDir } };
+          if (sortBy === "company") return { Company: { label: sortDir } };
+          if (sortBy === "status") return { Status: { value: sortDir } };
+          return { createdAt: sortDir };
+        })(),
       }),
       prisma.job.count({
         where: whereClause,

@@ -1,6 +1,9 @@
 "use server";
 
 import { getJobberPool, type ScrapedJob } from "@/lib/jobber-db";
+import prisma from "@/lib/db";
+import { getCurrentUser } from "@/utils/user.utils";
+import { handleError } from "@/lib/utils";
 
 interface ScrapedJobsResult {
   jobs: ScrapedJob[];
@@ -204,5 +207,90 @@ export async function getScrapedJobStats(): Promise<{
       avgScore: 0,
       highRelevance: 0,
     };
+  }
+}
+
+export async function addScrapedJobToMyJobs(scrapedJobId: string): Promise<{ success: boolean; jobId?: string; message?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const pool = getJobberPool();
+    if (!pool) throw new Error("Jobber database not available");
+
+    const res = await pool.query(
+      "SELECT * FROM jobs WHERE job_id = $1 LIMIT 1",
+      [scrapedJobId]
+    );
+    const scraped: ScrapedJob | undefined = res.rows[0];
+    if (!scraped) throw new Error("Scraped job not found");
+
+    // Find or create a "Draft" status (global, no userId)
+    let status = await prisma.jobStatus.findFirst({ where: { value: "draft" } });
+    if (!status) {
+      status = await prisma.jobStatus.create({ data: { label: "Draft", value: "draft" } });
+    }
+
+    // Find or create JobTitle for this user
+    const titleValue = (scraped.title ?? "Unknown").toLowerCase().trim();
+    let jobTitle = await prisma.jobTitle.findFirst({
+      where: { value: titleValue, createdBy: user.id },
+    });
+    if (!jobTitle) {
+      jobTitle = await prisma.jobTitle.create({
+        data: { label: scraped.title ?? "Unknown", value: titleValue, createdBy: user.id },
+      });
+    }
+
+    // Find or create Company for this user
+    const companyValue = (scraped.company ?? "Unknown").toLowerCase().trim();
+    let company = await prisma.company.findFirst({
+      where: { value: companyValue, createdBy: user.id },
+    });
+    if (!company) {
+      company = await prisma.company.create({
+        data: { label: scraped.company ?? "Unknown", value: companyValue, createdBy: user.id },
+      });
+    }
+
+    // Find or create JobSource for this user
+    const sourceValue = (scraped.source ?? "scraped").toLowerCase().trim();
+    let jobSource = await prisma.jobSource.findFirst({
+      where: { value: sourceValue, createdBy: user.id },
+    });
+    if (!jobSource) {
+      jobSource = await prisma.jobSource.create({
+        data: {
+          label: scraped.source
+            ? scraped.source.charAt(0).toUpperCase() + scraped.source.slice(1)
+            : "Scraped",
+          value: sourceValue,
+          createdBy: user.id,
+        },
+      });
+    }
+
+    const job = await prisma.job.create({
+      data: {
+        userId: user.id,
+        jobUrl: scraped.url ?? null,
+        description: scraped.description ?? "",
+        jobType: "full-time",
+        createdAt: new Date(),
+        statusId: status.id,
+        jobTitleId: jobTitle.id,
+        companyId: company.id,
+        jobSourceId: jobSource.id,
+        matchScore: scraped.relevance_score,
+        matchData: scraped.llm_summary,
+        discoveryStatus: "scraped",
+        discoveredAt: scraped.date_scraped ? new Date(scraped.date_scraped) : new Date(),
+      },
+    });
+
+    return { success: true, jobId: job.id };
+  } catch (error) {
+    const result = handleError(error, "Failed to add job to My Jobs.");
+    return { success: false, message: result?.message ?? "Unknown error" };
   }
 }

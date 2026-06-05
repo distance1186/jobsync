@@ -54,12 +54,21 @@ export function ScrapedJobsContainer({
   const [source, setSource] = useState<string>("");
   const [minScore, setMinScore] = useState<string>("");
   const [status, setStatus] = useState<string>("");
+  const [sortBy, setSortBy] = useState("date_scraped");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [isPending, startTransition] = useTransition();
 
   const pageSize = 25;
   const totalPages = Math.ceil(total / pageSize);
 
-  const fetchJobs = (newPage?: number) => {
+  const handleSort = (column: string) => {
+    const newDir = column === sortBy && sortDir === "desc" ? "asc" : column === sortBy ? "desc" : "desc";
+    setSortBy(column);
+    setSortDir(newDir);
+    fetchJobsWithSort(column, newDir, 1);
+  };
+
+  const fetchJobsWithSort = (sb: string, sd: "asc" | "desc", newPage?: number) => {
     startTransition(async () => {
       const result = await getScrapedJobs({
         page: newPage ?? page,
@@ -68,11 +77,17 @@ export function ScrapedJobsContainer({
         minScore: minScore ? parseInt(minScore) : undefined,
         status: status || undefined,
         search: search || undefined,
+        sortBy: sb,
+        sortDir: sd,
       });
       setJobs(result.jobs);
       setTotal(result.total);
       if (newPage) setPage(newPage);
     });
+  };
+
+  const fetchJobs = (newPage?: number) => {
+    fetchJobsWithSort(sortBy, sortDir, newPage);
   };
 
   const handleFilter = () => {
@@ -86,8 +101,10 @@ export function ScrapedJobsContainer({
     setMinScore("");
     setStatus("");
     setPage(1);
+    setSortBy("date_scraped");
+    setSortDir("desc");
     startTransition(async () => {
-      const result = await getScrapedJobs({ page: 1, pageSize });
+      const result = await getScrapedJobs({ page: 1, pageSize, sortBy: "date_scraped", sortDir: "desc" });
       setJobs(result.jobs);
       setTotal(result.total);
     });
@@ -183,8 +200,11 @@ export function ScrapedJobsContainer({
                 <SelectValue placeholder="Source" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="dice">Dice</SelectItem>
-                <SelectItem value="linkedin">LinkedIn</SelectItem>
+                {Object.keys(stats.bySource).sort().map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={minScore} onValueChange={setMinScore}>
@@ -230,7 +250,13 @@ export function ScrapedJobsContainer({
             </div>
           ) : (
             <>
-              <ScrapedJobsTable jobs={jobs} onRefresh={() => fetchJobs()} />
+              <ScrapedJobsTable
+                jobs={jobs}
+                onRefresh={() => fetchJobs()}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
+              />
 
               {/* Pagination */}
               <div className="flex items-center justify-between mt-4">
