@@ -9,6 +9,8 @@ import {
   Zap,
   BookOpen,
   Radar,
+  CalendarCheck2,
+  Users,
 } from "lucide-react";
 
 export const APP_CONSTANTS = {
@@ -65,7 +67,17 @@ export const SIDEBAR_LINKS = [
   {
     icon: Zap,
     route: "/dashboard/automations",
-    label: "Automations",
+    label: "Legacy Automations",
+  },
+  {
+    icon: CalendarCheck2,
+    route: "/dashboard/interviews",
+    label: "Interviews",
+  },
+  {
+    icon: Users,
+    route: "/dashboard/contacts",
+    label: "Contacts",
   },
   {
     icon: SquareCheckBig,
