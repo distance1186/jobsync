@@ -158,6 +158,20 @@ export async function deleteApiKey(provider: string): Promise<{
   }
 }
 
+export async function checkRapidApiConfigured(): Promise<boolean> {
+  if (process.env.RAPIDAPI_KEY) return true;
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+    const key = await db.apiKey.findUnique({
+      where: { userId_provider: { userId: user.id, provider: "rapidapi" } },
+    });
+    return !!key;
+  } catch {
+    return false;
+  }
+}
+
 export async function getDefaultOllamaBaseUrl(): Promise<string> {
   return process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 }
