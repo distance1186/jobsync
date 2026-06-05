@@ -60,7 +60,7 @@ export const AiJobMatchSection = ({
           const aiSettings = result.data.settings.ai;
           setSelectedModel({
             provider: aiSettings.provider || defaultModel.provider,
-            model: aiSettings.model,
+            model: aiSettings.model || defaultModel.model,
           });
         }
       } catch (error) {

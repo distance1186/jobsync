@@ -45,5 +45,5 @@ export enum DeepseekModel {
 
 export const defaultModel: AiModel = {
   provider: AiProvider.OLLAMA,
-  model: OllamaModel.LLAMA3_1,
+  model: "qwen2.5-coder:7b",
 };

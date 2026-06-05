@@ -22,7 +22,7 @@ export interface UserSettings {
 export const defaultUserSettings: UserSettingsData = {
   ai: {
     provider: AiProvider.OLLAMA,
-    model: undefined,
+    model: "qwen2.5-coder:7b",
   },
   display: {
     theme: "system",

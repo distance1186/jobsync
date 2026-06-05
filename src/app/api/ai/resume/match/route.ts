@@ -92,7 +92,7 @@ export const POST = async (req: NextRequest) => {
 
     const model = await getModel(
       selectedModel.provider,
-      selectedModel.model || "llama3.2",
+      selectedModel.model || "qwen2.5-coder:7b",
       userId,
     );
 
