@@ -270,6 +270,9 @@ model Interview {
   jobId        String
   job          Job?      @relation(fields: [jobId], references: [id])
   interviewers Contact[]
+  type         String?
+  status       String?
+  notes        String?
 }
 
 model Job {

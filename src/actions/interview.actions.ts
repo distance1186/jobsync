@@ -12,7 +12,13 @@ export const getInterviews = async (): Promise<any> => {
       where: {
         job: { userId: user.id },
       },
-      include: {
+      select: {
+        id: true,
+        createdAt: true,
+        jobId: true,
+        type: true,
+        status: true,
+        notes: true,
         job: {
           select: {
             id: true,
@@ -36,6 +42,9 @@ export const getInterviews = async (): Promise<any> => {
 export const createInterview = async (data: {
   jobId: string;
   createdAt: Date;
+  type?: string;
+  status?: string;
+  notes?: string;
 }): Promise<any> => {
   try {
     const user = await getCurrentUser();
@@ -50,12 +59,39 @@ export const createInterview = async (data: {
       data: {
         jobId: data.jobId,
         createdAt: data.createdAt,
+        type: data.type || null,
+        status: data.status || null,
+        notes: data.notes || null,
       },
     });
 
     return { data: interview, success: true };
   } catch (error) {
     return handleError(error, "Failed to create interview.");
+  }
+};
+
+export const updateInterview = async (
+  id: string,
+  data: {
+    createdAt?: Date;
+    type?: string | null;
+    status?: string | null;
+    notes?: string | null;
+  },
+): Promise<any> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const interview = await prisma.interview.update({
+      where: { id, job: { userId: user.id } },
+      data,
+    });
+
+    return { data: interview, success: true };
+  } catch (error) {
+    return handleError(error, "Failed to update interview.");
   }
 };
 

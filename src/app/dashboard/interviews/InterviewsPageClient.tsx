@@ -19,16 +19,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { createInterview, deleteInterview } from "@/actions/interview.actions";
 import { useRouter } from "next/navigation";
+
+const INTERVIEW_TYPES = ["phone", "video", "onsite", "technical"] as const;
+const INTERVIEW_STATUSES = ["scheduled", "completed", "cancelled", "no_show"] as const;
+
+const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  scheduled: "default",
+  completed: "secondary",
+  cancelled: "destructive",
+  no_show: "outline",
+};
 
 interface Interview {
   id: string;
   createdAt: Date;
   jobId: string;
+  type?: string | null;
+  status?: string | null;
+  notes?: string | null;
   job?: {
     id: string;
     JobTitle?: { label: string } | null;
@@ -49,7 +71,18 @@ export default function InterviewsPageClient({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [jobId, setJobId] = useState("");
   const [date, setDate] = useState("");
+  const [type, setType] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
+  const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const resetForm = () => {
+    setJobId("");
+    setDate("");
+    setType("");
+    setStatus("");
+    setNotes("");
+  };
 
   const handleCreate = () => {
     if (!jobId || !date) {
@@ -60,12 +93,14 @@ export default function InterviewsPageClient({
       const result = await createInterview({
         jobId,
         createdAt: new Date(date),
+        type: type || undefined,
+        status: status || undefined,
+        notes: notes || undefined,
       });
       if (result?.success) {
         toast({ description: "Interview created successfully" });
         setDialogOpen(false);
-        setJobId("");
-        setDate("");
+        resetForm();
         router.refresh();
       } else {
         toast({
@@ -121,7 +156,10 @@ export default function InterviewsPageClient({
                 <TableHead>Job Title</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Interviewers</TableHead>
+                <TableHead>Notes</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -138,9 +176,24 @@ export default function InterviewsPageClient({
                     {format(new Date(interview.createdAt), "PPP")}
                   </TableCell>
                   <TableCell>
+                    {interview.type ? (
+                      <span className="capitalize text-sm">{interview.type}</span>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    {interview.status ? (
+                      <Badge variant={statusVariant[interview.status] ?? "outline"} className="capitalize">
+                        {interview.status.replace("_", " ")}
+                      </Badge>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell>
                     {interview.interviewers.length > 0
                       ? interview.interviewers.map((i) => i.name).join(", ")
                       : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                    {interview.notes ?? "—"}
                   </TableCell>
                   <TableCell>
                     <Button
@@ -159,7 +212,7 @@ export default function InterviewsPageClient({
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Interview</DialogTitle>
@@ -183,9 +236,47 @@ export default function InterviewsPageClient({
                 onChange={(e) => setDate(e.target.value)}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Type</Label>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTERVIEW_TYPES.map((t) => (
+                      <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTERVIEW_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                placeholder="Interviewer names, topics covered, feedback…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={isPending}>

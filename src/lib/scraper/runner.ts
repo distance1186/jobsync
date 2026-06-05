@@ -4,10 +4,9 @@ import type {
   Automation,
   AutomationRunStatus,
   ScrapedJobData,
-  JobBoard,
 } from "@/models/automation.model";
-import type { ScraperError, JobDetails } from "./types";
-import { searchJSearchJobs } from "./jsearch";
+import type { JobDetails } from "./types";
+import { searchScrapedJobs } from "@/lib/jobber-db";
 import { mapScrapedJobToJobRecord } from "./mapper";
 import { normalizeJobUrl } from "./utils";
 import { calculateNextRunAt } from "./schedule";
@@ -29,7 +28,6 @@ import {
   defaultUserSettings,
   type AiSettings,
 } from "@/models/userSettings.model";
-import { resolveApiKey } from "@/lib/api-key-resolver";
 
 const MAX_JOBS_PER_RUN = 10;
 
@@ -58,18 +56,6 @@ async function getUserAiSettings(userId: string): Promise<AiSettings> {
     ...defaultUserSettings.ai,
     ...settings.ai,
   };
-}
-
-function getErrorMessage(error: ScraperError): string {
-  switch (error.type) {
-    case "blocked":
-      return error.reason;
-    case "rate_limited":
-      return `Rate limited${error.retryAfter ? ` - retry after ${error.retryAfter}s` : ""}`;
-    case "network":
-    case "parse":
-      return error.message;
-  }
 }
 
 export interface RunnerResult {
@@ -191,50 +177,30 @@ export async function runAutomation(
     automationLogger.log(
       automation.id,
       "info",
-      `Searching for jobs: "${automation.keywords}" in ${automation.location}`,
+      `Searching Jobber database for: "${automation.keywords}" in "${automation.location || "any location"}"`,
     );
 
-    // Use JSearch API with user's key if available
-    const rapidApiKey = await resolveApiKey(automation.userId, "rapidapi");
-    const searchResult = await searchJSearchJobs(
+    const scrapedRows = await searchScrapedJobs(
       automation.keywords,
       automation.location,
-      rapidApiKey,
     );
 
-    if (!searchResult.success) {
-      automationLogger.log(
-        automation.id,
-        "error",
-        `Search failed: ${searchResult.error.type} - ${getErrorMessage(searchResult.error)}`,
-      );
-      automationLogger.endRun(automation.id);
+    const allJobs: Array<JobDetails & { source: string }> = scrapedRows.map((sj) => ({
+      title: sj.title ?? "",
+      company: sj.company ?? "",
+      location: sj.location ?? "",
+      description: sj.description ?? "",
+      url: sj.url ?? "",
+      postedDate: sj.date_posted ?? undefined,
+      source: sj.source,
+    }));
 
-      const status = getStatusFromError(searchResult.error);
-      return await finalizeRun(run.id, {
-        status,
-        errorMessage:
-          searchResult.error.type === "network"
-            ? searchResult.error.message
-            : undefined,
-        blockedReason:
-          searchResult.error.type === "blocked"
-            ? searchResult.error.reason
-            : undefined,
-        jobsSearched: 0,
-        jobsDeduplicated: 0,
-        jobsProcessed: 0,
-        jobsMatched: 0,
-        jobsSaved: 0,
-      });
-    }
-
-    const jobsSearched = searchResult.data.length;
+    const jobsSearched = allJobs.length;
 
     automationLogger.log(
       automation.id,
       "success",
-      `Found ${jobsSearched} jobs from JSearch API`,
+      `Found ${jobsSearched} jobs from Jobber database`,
       { jobsSearched },
     );
 
@@ -242,7 +208,7 @@ export async function runAutomation(
       automationLogger.log(
         automation.id,
         "warning",
-        "No jobs found matching search criteria",
+        "No jobs found matching search criteria — try broader keywords or check that the Jobber pipeline has run recently",
       );
       automationLogger.endRun(automation.id);
 
@@ -263,8 +229,8 @@ export async function runAutomation(
     );
 
     const existingJobUrls = await getExistingJobUrls(automation.userId);
-    const newJobs = searchResult.data.filter(
-      (job) => !existingJobUrls.has(normalizeJobUrl(job.url)),
+    const newJobs = allJobs.filter(
+      (job) => job.url && !existingJobUrls.has(normalizeJobUrl(job.url)),
     );
     const jobsDeduplicated = newJobs.length;
 
@@ -292,7 +258,6 @@ export async function runAutomation(
 
     const aiSettings = await getUserAiSettings(automation.userId);
 
-    // JSearch returns full job details, no separate extraction needed
     for (const job of jobsToProcess) {
       automationLogger.log(
         automation.id,
@@ -312,7 +277,6 @@ export async function runAutomation(
       const matchResult = await matchJobToResume(
         job,
         resume as ResumeWithSections,
-        automation.jobBoard as JobBoard,
         aiSettings,
         automation.userId,
       );
@@ -366,7 +330,7 @@ export async function runAutomation(
           location: job.location,
           description: job.description,
           sourceUrl: normalizeJobUrl(job.url),
-          sourceBoard: automation.jobBoard as JobBoard,
+          sourceBoard: job.source || "jobber",
         };
 
         const jobRecord = await mapScrapedJobToJobRecord({
@@ -484,7 +448,6 @@ interface MatchResult {
 async function matchJobToResume(
   job: JobDetails,
   resume: ResumeWithSections,
-  sourceBoard: JobBoard,
   aiSettings: AiSettings,
   userId: string,
 ): Promise<MatchResult> {
@@ -595,17 +558,6 @@ async function convertResumeForMatch(
   }
 
   return parts.filter(Boolean).join("\n");
-}
-
-function getStatusFromError(error: ScraperError): AutomationRunStatus {
-  switch (error.type) {
-    case "blocked":
-      return "blocked";
-    case "rate_limited":
-      return "rate_limited";
-    default:
-      return "failed";
-  }
 }
 
 interface FinalizeData {

@@ -79,7 +79,7 @@ export function AutomationWizard({
     mode: "onChange",
     defaultValues: {
       name: editAutomation?.name ?? "",
-      jobBoard: (editAutomation?.jobBoard as "jsearch") ?? "jsearch",
+      jobBoard: (editAutomation?.jobBoard as "jsearch" | "jobber") ?? "jobber",
       keywords: editAutomation?.keywords ?? "",
       location: editAutomation?.location ?? "",
       resumeId: editAutomation?.resumeId ?? "",
@@ -92,7 +92,7 @@ export function AutomationWizard({
     if (open) {
       form.reset({
         name: editAutomation?.name ?? "",
-        jobBoard: (editAutomation?.jobBoard as "jsearch") ?? "jsearch",
+        jobBoard: (editAutomation?.jobBoard as "jsearch" | "jobber") ?? "jobber",
         keywords: editAutomation?.keywords ?? "",
         location: editAutomation?.location ?? "",
         resumeId: editAutomation?.resumeId ?? "",
@@ -214,11 +214,11 @@ export function AutomationWizard({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="jsearch">JSearch (Google Jobs)</SelectItem>
+                    <SelectItem value="jobber">Jobber (Auto-Scraper)</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  The job board to search (more coming soon)
+                  Jobs are sourced from the Jobber scraping pipeline (Dice, Adzuna, TheMuse, USAJobs)
                 </FormDescription>
                 <FormMessage />
               </FormItem>

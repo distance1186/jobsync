@@ -45,3 +45,62 @@ export interface ScrapedJob {
   status: string;
   notes: string | null;
 }
+
+/**
+ * Search scraped jobs from Jobber Postgres by keyword (title match) and
+ * optional location. Intended as the data source for automation runs.
+ *
+ * Keywords are split on whitespace; all words ≥ 3 chars must appear in
+ * the job title (case-insensitive). Location is skipped when empty or
+ * when it matches a broad US-wide term.
+ *
+ * Returns up to 100 jobs sorted by relevance_score DESC, date_scraped DESC.
+ * Returns [] if the pool is unavailable.
+ */
+export async function searchScrapedJobs(
+  keywords: string,
+  location: string,
+  daysBack: number = 30,
+): Promise<ScrapedJob[]> {
+  const pool = getJobberPool();
+  if (!pool) return [];
+
+  const words = keywords
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+
+  const params: (string | number)[] = [daysBack];
+  let paramIdx = 2;
+  const conditions: string[] = [`date_scraped >= NOW() - ($1 || ' days')::interval`];
+
+  if (words.length > 0) {
+    const wordConds = words.map((w) => {
+      params.push(`%${w}%`);
+      return `title ILIKE $${paramIdx++}`;
+    });
+    conditions.push(`(${wordConds.join(" AND ")})`);
+  }
+
+  const broad = ["united states", "us", "usa", "u.s.", "u.s.a.", "remote", ""];
+  const locNorm = location.trim().toLowerCase();
+  if (locNorm && !broad.includes(locNorm)) {
+    params.push(`%${locNorm}%`);
+    conditions.push(`location ILIKE $${paramIdx++}`);
+  }
+
+  const sql = `
+    SELECT * FROM jobs
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY relevance_score DESC, date_scraped DESC
+    LIMIT 100
+  `;
+
+  try {
+    const result = await pool.query(sql, params);
+    return result.rows as ScrapedJob[];
+  } catch (err) {
+    console.error("[jobber-db] searchScrapedJobs error:", err);
+    return [];
+  }
+}
