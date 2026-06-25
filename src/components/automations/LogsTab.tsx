@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,13 +34,17 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
     isRunning: false,
   });
   const [filter, setFilter] = useState<LogLevel | "all">("all");
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const esRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    const eventSource = new EventSource(
-      `/api/automations/${automationId}/logs`,
-    );
+  const connect = () => {
+    if (esRef.current) {
+      esRef.current.close();
+    }
+    const es = new EventSource(`/api/automations/${automationId}/logs`);
+    esRef.current = es;
 
-    eventSource.onmessage = (event) => {
+    es.onmessage = (event) => {
       try {
         const data: LogData = JSON.parse(event.data);
         setLogData(data);
@@ -49,20 +53,32 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
       }
     };
 
-    eventSource.onerror = () => {
-      eventSource.close();
+    // Don't close on error — let EventSource auto-reconnect (built-in behaviour).
+    // Only log the issue for debugging.
+    es.onerror = () => {
+      console.debug("[LogsTab] SSE error/disconnect, will auto-reconnect");
     };
+  };
 
-    return () => {
-      eventSource.close();
-    };
-  }, [automationId]);
-
+  // Connect once on mount and whenever automationId changes
   useEffect(() => {
-    if (runKey !== undefined) {
-      setLogData({ logs: [], isRunning: true });
-    }
-  }, [runKey]);
+    connect();
+    return () => {
+      esRef.current?.close();
+    };
+  }, [automationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reconnect when a new run starts so we pick up fresh logs immediately
+  useEffect(() => {
+    if (runKey === undefined) return;
+    setLogData({ logs: [], isRunning: true });
+    connect();
+  }, [runKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scroll to the latest log entry as new lines arrive
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logData.logs.length]);
 
   const handleClearLogs = async () => {
     try {
@@ -205,7 +221,7 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
             </div>
           ) : (
             <div className="space-y-2 font-mono text-xs">
-              {[...filteredLogs].reverse().map((log, index) => (
+              {filteredLogs.map((log, index) => (
                 <div
                   key={index}
                   className="flex gap-2 p-2 rounded border hover:bg-muted/50"
@@ -236,6 +252,7 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
                   </div>
                 </div>
               ))}
+              <div ref={bottomRef} />
             </div>
           )}
         </ScrollArea>
